@@ -7,7 +7,6 @@
  */
 
 #include "IRremote.h"
-#include "flashee-eeprom.h"
 #include "WebServer.h"
 #include "neopixel.h"
 
@@ -44,48 +43,6 @@ uint8_t red = 0;
 uint8_t green = 0;
 uint8_t blue = 0;
 
-
-// Flash Fat File System --------------------------------------------------------------------------------
-/*FATFS fs;
-FRESULT result;
-const char* name = "settings.txt";
-const char* message = "The world's smallest NAS?";
-
-void printError(Print& p, uint result) {
-    switch (result) {
-        case FR_OK:
-            p.print("OK");
-            break;
-
-        case FR_NO_FILESYSTEM:
-            p.print("Invalid filesystem");
-            break;
-
-        case FR_NO_FILE:
-            p.print("File not found");
-            break;
-
-        case FR_EXIST:
-            p.print("File exists");
-            break;
-
-    default:
-        p.print("unknown error: ");
-        p.print(result);
-    }
-}
-
-void printResult(Print& p, uint fr, const char* success, const char* fail) {
-    if (fr==FR_OK)
-        p.println(success);
-    else {
-        p.print(fail);
-        p.print(" :");
-        printError(p, fr);
-        p.println();
-    }
-}*/
-
 /* This command is set as the default command for the server.  It
  * handles both GET and POST requests.  For a GET, it returns a simple
  * page with some buttons.  For a POST, it saves the value posted to
@@ -105,7 +62,7 @@ void pageCmd(WebServer &server, WebServer::ConnectionType type, char *, bool)
       repeat = server.readPOSTparam(name, 16, value, 16);
       Serial.println(name);
 
-      translateIrCode(name);
+      sendIrAction(atoi(name));
 
     } while (repeat);
 
@@ -165,64 +122,17 @@ void pageCmd(WebServer &server, WebServer::ConnectionType type, char *, bool)
 
     P(messageEnd) =
         "        </div>\n"
-        "        <div>\n"
-        "            <a class=\"sign_new\" href=\"#upload_config\">Config</a>\n"
-        "        </div>\n"
         "    </body>\n"
         "</html>\n";
 
     // Serve the first part of the web page
     server.printP(message);
-    // Print the contents of the settings file
-    /*if (result!=FR_OK) {
-        FIL fil;
-        FRESULT fr;
-        UINT dw;
-        char buf[128];
-        ((fr=f_open(&fil, name, FA_READ|FA_OPEN_EXISTING))==FR_OK) &&
-        ((fr=f_read(&fil, buf, sizeof(buf), &dw))==FR_OK) &&
-        ((fr=f_close(&fil))==FR_OK);
-        if (fr==FR_OK)
-            server.printP(buf);
-        else
-            server.printP("            No Data Stored in File System<br>\n");
-        server.printP("configData<br>\n");
-        server.printP(configData);
-        server.printP("<br>Finished<br>\n");
-    }*/
-
-    // Serve the buttons
-    #define BUTTON_COUNT 18
-    char *irId[BUTTON_COUNT];
-    char *irNames[BUTTON_COUNT];
-
-    // TV
-    irId[0] = "tvSource"; irNames[0] = "TV Source";
-    irId[1] = "tvMenu";   irNames[1] = "TV Menu";
-    irId[2] = "tvUp";     irNames[2] = "TV Up";
-    irId[3] = "tvDown";   irNames[3] = "TV Down";
-    irId[4] = "tvEnter";  irNames[4] = "TV Enter";
-    //Receiver
-    irId[5] = "volumeUp";      irNames[5] = "Volume Up";
-    irId[6] = "volumeDown";    irNames[6] = "Volume Down";
-    irId[7] = "mute";          irNames[7] = "RCV Mute";
-    irId[8] = "input_video1";  irNames[8] = "RCV Video 1";
-    irId[9] = "input_video2";  irNames[9] = "RCV Video 2";
-    irId[10] = "input_dvd_ld";  irNames[10] = "RCV DVD";
-    irId[11] = "input_md_tape"; irNames[11] = "RCV Tape";
-    irId[12] = "input_cd";      irNames[12] = "RCV CD";
-    irId[13] = "input_tuner";   irNames[13] = "RCV Radio";
-    irId[14] = "input_multi";   irNames[14] = "RCV Multi";
-    // Power
-    irId[15] = "power";     irNames[15] = "Power";
-    irId[16] = "recPower";  irNames[16] = "RCV Power";
-    irId[17] = "tvPower";   irNames[17] = "TV Power";
 
     for (int i=0; i<BUTTON_COUNT; i++) {
       server.printP("            <button type=\"button\" id=\"");
-      server.printP(irId[i]);
+      server.printf("%i", i);
       server.printP("\">");
-      server.printP(irNames[i]);
+      server.printP(irActions[i].displayName);
       server.printP("</button>\n");
     }
     // Serve the last of the web page
@@ -247,25 +157,6 @@ void setConfigCmd(WebServer &server, WebServer::ConnectionType type, char *url_t
       if (strcmp(name, "config") == 0) {
         Serial.println("Its config");
         configData = value;
-
-        /*if (result!=FR_OK) {      // don't do anything if the filesystem wasn't created
-            Serial.print("Error mounting filesystem: ");
-            printError(Serial, result);
-            Serial.println();
-            return;
-        }
-
-        FIL fil;
-        FRESULT fr;
-        UINT dw;
-        char buf[128];
-        Serial.println("cmd: create file setting.txt");
-        // this syntax might look strange - it allows you to chain multiple commands together, stopping at
-        // the first one that returns something other than FR_OK
-        ((fr=f_open(&fil, name, FA_WRITE|FA_CREATE_NEW))==FR_OK) &&
-        ((fr=f_write(&fil, message, strlen(message)+1, &dw))==FR_OK) &&
-        ((fr=f_close(&fil))==FR_OK);
-        printResult(Serial, fr, "Created file setting.txt", "Unable to create file");*/
       }
     }
   }
@@ -514,17 +405,6 @@ void setup()
   /* NeoPixel setup */
   strip.begin();
   strip.show(); // Initialize all pixels to 'off'
-
-  // Fat File System ------------------------------------------------------
-  /*size_t length = EEPROM.length();
-  Serial.println(length/3);
-  result = Flashee::Devices::createFATRegion(0, length/3, &fs);
-
-  if (result!=FR_OK) {      // don't do anything if the filesystem wasn't created
-      Serial.print("Error mounting filesystem: ");
-      printError(Serial, result);
-      Serial.println();
-  }*/
 }
 
 void loop() {
@@ -561,55 +441,18 @@ void loop() {
 }
 
 void translateIrCode(String inputString){
-    if (inputString.equalsIgnoreCase("volumeUp")) {
-      sendMessage(SONY, 0x240C, 15);
-    } else if (inputString.equalsIgnoreCase("volumeDown")) {
-      sendMessage(SONY, 0x640C, 15);
-    } else if (inputString.equalsIgnoreCase("mute")) {
-      sendMessage(SONY, 0x140C, 15);
-    } else if (inputString.equalsIgnoreCase("power")) {
-      sendMessage(SONY, 0x540C, 15); // Receiver
-      sendMessage(NEC, 0x209D00FF, 32);  //TV
-    } else if (inputString.equalsIgnoreCase("recPower")) {
-      sendMessage(SONY, 0x540C, 15);
-    } else if (inputString.equalsIgnoreCase("input_video1")) {
-      sendMessage(SONY, 0x220C, 15);
-    } else if (inputString.equalsIgnoreCase("input_video2")) {
-      sendMessage(SONY, 0x3C0C, 15);
-    /*} else if (inputString.equalsIgnoreCase("input_video3")) {
-      sendMessage(SONY, 0x210C, 15);*/
-    } else if (inputString.equalsIgnoreCase("input_dvd_ld")) {
-      sendMessage(SONY, 0x5F0C, 15);
-    /*} else if (inputString.equalsIgnoreCase("input_tv_sat")) {
-      sendMessage(SONY, 0x2B0C, 15);*/
-    } else if (inputString.equalsIgnoreCase("input_md_tape")) {
-      sendMessage(SONY, 0x4B0C, 15);
-    } else if (inputString.equalsIgnoreCase("input_cd")) {
-      sendMessage(SONY, 0x520C, 15);
-    } else if (inputString.equalsIgnoreCase("input_tuner")) {
-      sendMessage(SONY, 0x420C, 15);
-    /*} else if (inputString.equalsIgnoreCase("input_phono")) {
-      sendMessage(SONY, 0x020C, 15);
-    } else if (inputString.equalsIgnoreCase("input_aux")) {
-      sendMessage(SONY, 0x5C0C, 15);*/
-    } else if (inputString.equalsIgnoreCase("input_multi")) {
-      sendMessage(SONY, 0x270C, 15);
-    }
-    // TV Controls
-    else if (inputString.equalsIgnoreCase("tvPower")) {
-      sendMessage(NEC, 0x209D00FF, 32);
-    } else if (inputString.equalsIgnoreCase("tvSource")) {
-      sendMessage(NEC, 0x209DB847, 32);
-    } else if (inputString.equalsIgnoreCase("tvMenu")) {
-      sendMessage(NEC, 0x209DD827, 32);
-    } else if (inputString.equalsIgnoreCase("tvUp")) {
-      sendMessage(NEC, 0x209D08F7, 32);
-    } else if (inputString.equalsIgnoreCase("tvDown")) {
-      sendMessage(NEC, 0x209D8877, 32);
-    } else if (inputString.equalsIgnoreCase("tvEnter")) {
-      sendMessage(NEC, 0x209D38C7, 32);
-    }
+
     Serial.println(inputString);
+}
+
+bool sendIrAction(int actionId) {
+  if (actionId < 0 || actionId > BUTTON_COUNT) {
+    return false; // Invalid value
+  }
+  for (int i; i < DATA_COUNT; i++) {
+    IRData command = irActions[actionId].commands[0];
+    sendMessage(command.sysType, command.data, command.nbits);
+  }
 }
 
 void sendMessage(int system, unsigned long data, int nbits) {
