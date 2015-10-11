@@ -10,11 +10,24 @@
 #include "WebServer.h"
 #include "neopixel.h"
 
+#include "Adafruit_GFX.h"
+#include "Adafruit_SSD1306.h"
+
 #include "example.h"
 
+// OLED display -----------------------------------------------------------------------------------------
+#define OLED_RESET 4
+Adafruit_SSD1306 display(OLED_RESET);
+
+#if (SSD1306_LCDHEIGHT != 64)
+#error("Height incorrect, please fix Adafruit_SSD1306.h!");
+#endif
+
+char deviceIP[24];
+long lastUpdate = 0; // Used to clear the display after a delay
+long displayReset = 1000; // Reset the display after this many millis
+
 // IR Send ----------------------------------------------------------------------------------------------
-String inputString = "";         // a string to hold incoming data
-boolean stringComplete = false;  // whether the string is complete
 String configData = ""; // Used to store the config string
 
 IRsend irsend(D2);
@@ -22,7 +35,7 @@ IRsend irsend(D2);
 #define button D3
 bool lastState = false;
 
-// Web Server -------------------------------------------------------------------------------------------
+// Web Server ------------------------------------------------------------------
 /* We will listen on port 80, the standard HTTP service port */
 WebServer webserver("", 80);
 #define NAMELEN 32
@@ -30,7 +43,7 @@ WebServer webserver("", 80);
 // If defined, accept http://host/parsed.html for debuging
 #define PARSEDCMD
 
-// NeoPixel ---------------------------------------------------------------------------------------------
+// NeoPixel --------------------------------------------------------------------
 // IMPORTANT: Set pixel COUNT, PIN and TYPE
 #define PIXEL_PIN D6
 #define PIXEL_COUNT 1
@@ -51,6 +64,45 @@ void neoColor(int r, int g, int b) {
 /* Reset the NeoPixel to the color specified by the web server */
 void neoReset() {
   neoColor(red, green, blue);
+}
+
+// Debug printing to OLED and serial console -----------------------------------
+void displayClear(bool update=false) {
+  // Clear the buffer.
+  display.clearDisplay();
+  display.setCursor(0, 0);
+  display.setTextSize(2);
+  display.print("IP:");
+  display.setTextSize(1);
+  display.print(deviceIP);
+  display.setCursor(0, 16);
+  if (update) {
+    display.display();
+  }
+}
+
+void displayPrint(String text, bool update=false) {
+  display.print(text);
+  Serial.print(text);
+  if (update) {
+    display.display();
+  }
+}
+
+void displayPrintln(String text, bool update=false) {
+  display.println(text);
+  Serial.println(text);
+  if (update) {
+    display.display();
+  }
+}
+
+void displayPrintln(int base, bool update=false) {
+  display.println(base);
+  Serial.println(base);
+  if (update) {
+    display.display();
+  }
 }
 
 /* This command is set as the default command for the server.  It
@@ -162,14 +214,16 @@ void setConfigCmd(WebServer &server, WebServer::ConnectionType type, char *url_t
   if (type == WebServer::POST) {
     while (server.readPOSTparam(name, NAMELEN, value, VALUELEN))
     {
-      Serial.print("Name: ");
-      Serial.println(name);
-      Serial.print("Value: ");
-      Serial.println(value);
+      displayClear();
+      displayPrint("Name: ");
+      displayPrintln(name);
+      displayPrint("Value: ");
+      displayPrintln(value);
       if (strcmp(name, "config") == 0) {
-        Serial.println("Its config");
+        displayPrintln("Its config");
         configData = value;
       }
+      display.display();
     }
   }
 }
@@ -179,56 +233,38 @@ void setConfigCmdTest(WebServer &server, WebServer::ConnectionType type, char *u
   char name[NAMELEN];
   char value[VALUELEN];
 
+  displayClear();
   if (!tail_complete) {
     // this line sends the standard "we're all OK" headers back to the browser
-    Serial.println("URL Tail not complete");
+    displayPrintln("URL Tail not complete", true);
     server.httpFail();
   } else {
-    Serial.println("URL Tail complete");
+    displayPrintln("URL Tail complete", true);
     server.httpSuccess();
   }
 
   if (strlen(url_tail)) {
-      Serial.println(url_tail);
-      while (strlen(url_tail)) {
-        rc = server.nextURLparam(&url_tail, name, NAMELEN, value, VALUELEN);
-        if (rc == URLPARAM_EOS) {
-          Serial.println("OK");
-        } else {
-          Serial.println(name);
-          Serial.println(value);
-          if (strcmp(name, "config") == 0) {
-            configData = value;
-            return;
-          }
+    displayPrintln(url_tail);
+    while (strlen(url_tail)) {
+      rc = server.nextURLparam(&url_tail, name, NAMELEN, value, VALUELEN);
+      if (rc == URLPARAM_EOS) {
+        displayPrintln("OK");
+      } else {
+        displayPrint(name);
+        displayPrint(" ");
+        displayPrintln(value);
+        if (strcmp(name, "config") == 0) {
+          configData = value;
+          display.display();
+          return;
         }
       }
     }
-  configData = "Fail";
-  return ;
-
-  if (type == WebServer::POST)
-  {
-    bool repeat;
-    char name[16], value[1024];
-    do
-    {
-      /* readPOSTparam returns false when there are no more parameters
-       * to read from the input.  We pass in buffers for it to store
-       * the name and value strings along with the length of those
-       * buffers. */
-      repeat = server.readPOSTparam(name, 16, value, 16);
-      Serial.println(name);
-
-      //if (name == "config") {
-      configData = "Value";
-      //}
-
-    } while (repeat);
-
-    server.httpSuccess();
-    return;
   }
+
+  configData = "Fail";
+  display.display();
+  return;
 }
 
 void rgbCmd(WebServer &server, WebServer::ConnectionType type, char *url_tail, bool tail_complete) {
@@ -392,11 +428,24 @@ void faviconCmd(WebServer &server, WebServer::ConnectionType type, char *url_tai
 
 void setup()
 {
+  // Get the IP address so we can print it
+  IPAddress myIp = WiFi.localIP();
+  sprintf(deviceIP, "%d.%d.%d.%d", myIp[0], myIp[1], myIp[2], myIp[3]);
+
   Serial.begin(9600);
-  // reserve 200 bytes for the inputString:
-  inputString.reserve(200);
 
   pinMode(button, INPUT_PULLDOWN);
+
+  // OLED ----------------------------------------------------------
+  display.begin(SSD1306_SWITCHCAPVCC, 0x3C);  // initialize with the I2C addr 0x3D (for the 128x64)
+  // Show the IP address
+  //display.clearDisplay();
+  display.setTextSize(2);
+  display.setTextColor(WHITE);
+  //display.println("IR Sender");
+  display.display();
+  delay(250);
+  displayClear(true);
 
   // Web Server ----------------------------------------------------------
   /* register our default command (activated with the request of
@@ -429,17 +478,25 @@ void loop() {
       }
       lastState = state;
   }
-}
 
-void translateIrCode(String inputString){
-
-    Serial.println(inputString);
+  if (lastUpdate != 0) {
+    unsigned long currentMillis = millis();
+    if(currentMillis - lastUpdate > displayReset) {
+      displayClear(true);
+      lastUpdate = 0;
+    }
+  }
 }
 
 bool sendIrAction(int actionId) {
+  // Reset the display after the delay
+  lastUpdate = millis() + displayReset;
+  displayClear();
+  display.setTextSize(2);
   if (actionId < 0 || actionId >= BUTTON_COUNT) {
     // A invalid id was passed, blink red 3 times then return.
-    Serial.println("InvalidID");
+    displayPrint("Invalid ID");
+    displayPrintln(actionId, true);
     for (int i=0; i < 3; i++) {
       neoColor(255, 0, 0);
       delay(100);
@@ -450,6 +507,8 @@ bool sendIrAction(int actionId) {
     return false; // Invalid value
   }
 
+  displayPrintln("Sending:");
+  displayPrintln(actionId, true);
   for (int i=0; i < irActions[actionId].commandCount; i++) {
     // Send each command
     IRCommand command = irActions[actionId].commands[i];
@@ -461,7 +520,7 @@ bool sendIrAction(int actionId) {
 }
 
 void sendMessage(int system, unsigned long data, int nbits, int repeat, int repeatDelay) {
-    neoColor(0, 0, 255);
+    neoColor(0, 0, 25);
     for (int i=0; i < repeat; i++) {
       switch (system) {
         case SONY:
