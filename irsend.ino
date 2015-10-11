@@ -141,59 +141,99 @@ void pageCmd(WebServer &server, WebServer::ConnectionType type, char *, bool)
   /* we don't output the body for a HEAD request */
   if (type == WebServer::GET)
   {
+    /* Python Code to convert a html file into P() compatible string data.
+          prefix = '      '
+          with open(r'C:\Users\mikeh\Google Drive\ESP8266\MicroRemote\web2py\applications\welcome\views\default\ajaxtest.html') as f:
+          	for line in f.readlines():
+          		line = line.replace('\n', '')
+          		line = line.replace('"', '\\"')
+          		print prefix + '"' + line + '\\n"'
+    */
+
     /* store the HTML in program memory using the P macro */
     P(message) =
-        "<!DOCTYPE html>\n"
-        "<html>\n"
-        "    <head>\n"
-        "        <meta charset=\"utf-8\">\n"
-        "        <meta name=\"apple-mobile-web-app-capable\" content=\"yes\" />\n"
-        "        <meta name=\"apple-mobile-web-app-status-bar-style\" content=\"black\">\n"
-        "        <link rel=\"apple-touch-icon\" href=\"/favicon.png\">\n"
-        "        <link rel=\"apple-touch-startup-image\" href=\"/favicon.png\">\n"
-        "        <meta http-equiv=\"X-UA-Compatible\" content=\"IE=edge,chrome=1\">\n"
-        "        <meta name=\"viewport\" content=\"width=device-width, user-scalable=no\">\n"
-        "        <title>Photon Blaster</title>\n"
-        "        <link rel=\"stylesheet\" href=\"http://code.jquery.com/mobile/1.0/jquery.mobile-1.0.min.css\" />\n"
-        "        <script src=\"http://code.jquery.com/jquery-1.6.4.min.js\"></script>\n"
-        "        <script src=\"http://code.jquery.com/mobile/1.0/jquery.mobile-1.0.min.js\"></script>\n"
-        "        <style> body, .ui-page { background: black; } .ui-body { padding-bottom: 1.5em; }</style>\n"
-        "        <script src=\"//ajax.googleapis.com/ajax/libs/jquery/1.10.2/jquery.min.js\"></script>\n"
-        "        <script>\n"
-        "            $(document).ready(function(){ \n"
-        "                $(':button').on('click', function(evt) {\n"
-        "                    evt.preventDefault();\n"
-        "                    console.log(this.id);\n"
-        "                    var data = {};\n"
-        "                    data[this.id] = 0;\n"
-        "                    $.post('', data);\n"
-        "                });\n"
-        "                $('a[href=\"#upload_config\"]').click(function(){\n"
-        "                    var configString = prompt(\"Please paste your config\", \"idName,DisplayName,system,code,nBits;\");\n"
-        "                    if (configString != null) {\n"
-        "                        console.log(configString);\n"
-        "                        $.post('setConfig.html', {'config':configString});\n"
-        "                    }\n"
-        "                }); \n"
-        "            });\n"
-        "        </script>\n"
-        "    </head>\n"
-        "    <body>\n"
-        "        <div data-role=\"header\" data-position=\"inline\">\n"
-        "            <h1>Photon Blaster</h1>\n"
-        "        </div>\n"
-        "        <div class=\"ui-body ui-body-a\">\n";
+      "<!DOCTYPE html>\n"
+      "<html>\n"
+      "    <head>\n"
+      "        <meta charset=\"utf-8\">\n"
+      "        <meta name=\"apple-mobile-web-app-capable\" content=\"yes\" />\n"
+      "        <meta name=\"apple-mobile-web-app-status-bar-style\" content=\"black\">\n"
+      "        <link rel=\"apple-touch-icon\" href=\"/favicon.png\">\n"
+      "        <link rel=\"apple-touch-startup-image\" href=\"/favicon.png\">\n"
+      "        <meta http-equiv=\"X-UA-Compatible\" content=\"IE=edge,chrome=1\">\n"
+      "        <meta name=\"viewport\" content=\"width=device-width, user-scalable=no\">\n"
+      "        <title>Photon Blaster</title>\n"
+      "        <link rel=\"stylesheet\" href=\"http://code.jquery.com/mobile/1.4.5/jquery.mobile-1.4.5.min.css\" />\n"
+      "        <script src=\"http://code.jquery.com/jquery-2.1.4.min.js\"></script>\n"
+      "        <script src=\"http://code.jquery.com/mobile/1.4.5/jquery.mobile-1.4.5.min.js\"></script>\n"
+      "        <script src=\"//ajax.googleapis.com/ajax/libs/jquery/1.10.2/jquery.min.js\"></script>\n"
+      "        <script src=\"//code.jquery.com/ui/1.11.4/jquery-ui.js\"></script>\n"
+      "        <style>\n"
+      "            .ui-body {padding-bottom: 1.5em; -webkit-column-count: 2; /* Chrome, Safari, Opera */ -moz-column-count: 2; /* Firefox */ column-count: 2;}\n"
+      "            .ui-btn-text, .ui-btn {position: initial;}\n"
+      "            #red, #green, #blue { margin: 10px; } \n"
+      "            #red { background: #f00; } \n"
+      "            #green { background: #0f0; } \n"
+      "            #blue { background: #00f; }\n"
+      "            h3 {text-align: center;}\n"
+      "            .ui-accordion-header {background-color:#748174;}\n"
+      "            .ui-accordion-header-active {background-color:#487B41;}\n"
+      "        </style>\n"
+      "        <script>\n"
+      "            $(document).ready(function(){ \n"
+      "                function changeRGB(event, ui) { \n"
+      "                    /*not to DDoS the Arduino, you might have to change this to some threshold value that fits your setup*/\n"
+      "                    jQuery.ajaxSetup({timeout: 110});  \n"
+      "                    var id = $(this).attr('id');\n"
+      "                    console.log(id + \"=\" + event.target.value);\n"
+      "                    if (id == 'red') $.post('/rgb.html?r=' + event.target.value);\n"
+      "                    if (id == 'green') $.post('/rgb.html?g=' + event.target.value);\n"
+      "                    if (id == 'blue') $.post('/rgb.html?b=' + event.target.value);\n"
+      "                };\n"
+      "                $(':button').on('click', function(evt) {\n"
+      "                    evt.preventDefault();\n"
+      "                    if (this.id == 'Color') {\n"
+      "                        console.log('/rgb.html?r=' + $('#red')[0].value + '&g=' + $('#green')[0].value + '&b=' + $('#blue')[0].value);\n"
+      "                        $.post('/rgb.html?r=' + $('#red')[0].value + '&g=' + $('#green')[0].value + '&b=' + $('#blue')[0].value);\n"
+      "                    } else {\n"
+      "                        console.log(this.id);\n"
+      "                        var data = {};\n"
+      "                        data[this.id] = 0;\n"
+      "                        $.post('', data);\n"
+      "                    }\n"
+      "                });\n"
+      "                $('#red, #green, #blue').bind('change', changeRGB);\n"
+      "            });\n"
+      "            $(function() {\n"
+      "                $( \"#accordion\" ).accordion({\n"
+      "                    collapsible: true\n"
+      "                });\n"
+      "            });\n"
+      "        </script>\n"
+      "    </head>\n"
+      "    <body>\n"
+      "        <div data-theme=\"b\" data-role=\"page\" id=\"accordion\">\n"
+      "            <h3>Photon Blaster</h3>\n"
+      "            <div class=\"ui-body\">\n";
 
     P(messageEnd) =
-        "        </div>\n"
-        "    </body>\n"
-        "</html>\n";
+      "            </div>\n"
+      "            <h3>Set Color</h3>\n"
+      "            <div class=\"rgb-slider\">\n"
+      "                <input type=\"range\" name=\"slider\" id=\"red\" value=\"0\" min=\"0\" max=\"255\" /><br>\n"
+      "                <input type=\"range\" name=\"slider\" id=\"green\" value=\"0\" min=\"0\" max=\"255\" /><br>\n"
+      "                <input type=\"range\" name=\"slider\" id=\"blue\" value=\"0\" min=\"0\" max=\"255\" /><br>\n"
+      "                <button id=\"Color\">Apply</button>\n"
+      "            </div>\n"
+      "        </div>\n"
+      "    </body>\n"
+      "</html>\n";
 
     // Serve the first part of the web page
     server.printP(message);
 
     for (int i=0; i<BUTTON_COUNT; i++) {
-      server.printP("            <button type=\"button\" id=\"");
+      server.printP("                <button type=\"button\" id=\"");
       server.printf("%i", i);
       server.printP("\">");
       server.printP(irActions[i].displayName);
@@ -295,9 +335,9 @@ void rgbCmd(WebServer &server, WebServer::ConnectionType type, char *url_tail, b
         } else if (strcmp(name, "b") == 0) {
           blue = strtoul(value, NULL, 10);
         }
-        neoReset();
       }
     }
+    neoReset();
   }
 }
 
