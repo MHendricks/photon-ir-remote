@@ -18,7 +18,6 @@ boolean stringComplete = false;  // whether the string is complete
 String configData = ""; // Used to store the config string
 
 IRsend irsend(D2);
-//IRrecv irrecv(D5);
 
 #define button D3
 bool lastState = false;
@@ -43,6 +42,17 @@ uint8_t red = 0;
 uint8_t green = 0;
 uint8_t blue = 0;
 
+/* Set the NeoPixel color to this RGB value */
+void neoColor(int r, int g, int b) {
+  strip.setPixelColor(0, r, g, b);
+  strip.show();
+}
+
+/* Reset the NeoPixel to the color specified by the web server */
+void neoReset() {
+  neoColor(red, green, blue);
+}
+
 /* This command is set as the default command for the server.  It
  * handles both GET and POST requests.  For a GET, it returns a simple
  * page with some buttons.  For a POST, it saves the value posted to
@@ -60,10 +70,12 @@ void pageCmd(WebServer &server, WebServer::ConnectionType type, char *, bool)
        * the name and value strings along with the length of those
        * buffers. */
       repeat = server.readPOSTparam(name, 16, value, 16);
-      Serial.println(name);
-
-      sendIrAction(atoi(name));
-
+      if (repeat) {
+        // Only send the name if we got a repeat value. This prevents sending
+        // Two messages.
+        Serial.println(name);
+        sendIrAction(atoi(name));
+      }
     } while (repeat);
 
     server.httpSuccess();
@@ -247,8 +259,7 @@ void rgbCmd(WebServer &server, WebServer::ConnectionType type, char *url_tail, b
         } else if (strcmp(name, "b") == 0) {
           blue = strtoul(value, NULL, 10);
         }
-        strip.setPixelColor(0, red, green, blue);
-        strip.show();
+        neoReset();
       }
     }
   }
@@ -386,7 +397,6 @@ void setup()
   inputString.reserve(200);
 
   pinMode(button, INPUT_PULLDOWN);
-  pinMode(D7, OUTPUT);
 
   // Web Server ----------------------------------------------------------
   /* register our default command (activated with the request of
@@ -396,7 +406,7 @@ void setup()
   webserver.addCommand("favicon.png", &faviconCmd);
   webserver.addCommand("rgb.html", &rgbCmd);
   #ifdef PARSEDCMD
-  webserver.addCommand("parsed.html", &parsedCmd);
+    webserver.addCommand("parsed.html", &parsedCmd);
   #endif
 
   /* start the server to wait for connections */
@@ -408,35 +418,16 @@ void setup()
 }
 
 void loop() {
-    // process incoming connections one at a time forever
-    webserver.processConnection();
+  // process incoming connections from the web server
+  webserver.processConnection();
 
-  while (Serial.available()) {
-    // get the new byte:
-    char inChar = (char)Serial.read();
-    // if the incoming character is a newline, set a flag
-    // so the main loop can do something about it:
-    if (inChar == '\n') {
-      stringComplete = true;
-    } else {
-      // add it to the inputString:
-      inputString += inChar;
-    }
-  }
+  // Check if the button was pressed
   bool state = digitalRead(button);
   if (state != lastState) {
       if (state){
-        stringComplete = true;
-        inputString = "tvMenu";
+        sendIrAction(BUTTON_ACTION_ID);
       }
       lastState = state;
-  }
-  // print the string when a newline arrives:
-  if (stringComplete) {
-    translateIrCode(inputString);
-    // clear the string:
-    inputString = "";
-    stringComplete = false;
   }
 }
 
@@ -446,31 +437,58 @@ void translateIrCode(String inputString){
 }
 
 bool sendIrAction(int actionId) {
-  if (actionId < 0 || actionId > BUTTON_COUNT) {
+  if (actionId < 0 || actionId >= BUTTON_COUNT) {
+    // A invalid id was passed, blink red 3 times then return.
+    Serial.println("InvalidID");
+    for (int i=0; i < 3; i++) {
+      neoColor(255, 0, 0);
+      delay(100);
+      neoColor(0, 0, 0);
+      delay(100);
+    }
+    neoReset();
     return false; // Invalid value
   }
-  for (int i; i < DATA_COUNT; i++) {
-    IRData command = irActions[actionId].commands[0];
-    sendMessage(command.sysType, command.data, command.nbits);
+
+  for (int i=0; i < irActions[actionId].commandCount; i++) {
+    // Send each command
+    IRCommand command = irActions[actionId].commands[i];
+    sendMessage(command.sysType, command.data, command.nbits, command.repeat, command.repeatDelay);
+    // Delay between commands
+    delay(command.delay);
   }
+  return true;
 }
 
-void sendMessage(int system, unsigned long data, int nbits) {
-    digitalWrite(D7, HIGH);
-    strip.setPixelColor(0, 0, 0, 255);
-    strip.show();
-    if (system == SONY) {
-        for (int i = 0; i < 3; i++) {
-          irsend.sendSony(data, nbits); // Sony
-          delay(40);
-        }
-    } else if (system == NEC) {
-        for (int i = 0; i < 1; i++) {
-          irsend.sendNEC(data, nbits); // Sony
-          delay(40);
-        }
+void sendMessage(int system, unsigned long data, int nbits, int repeat, int repeatDelay) {
+    neoColor(0, 0, 255);
+    for (int i=0; i < repeat; i++) {
+      switch (system) {
+        case SONY:
+          irsend.sendSony(data, nbits);
+          break;
+        case NEC:
+          irsend.sendNEC(data, nbits);
+          break;
+        case RC5:
+          irsend.sendRC5(data, nbits);
+          break;
+        case RC6:
+          irsend.sendRC6(data, nbits);
+          break;
+        case SHARP:
+          irsend.sendSharp(data, nbits);
+          break;
+        case DISH:
+          irsend.sendDISH(data, nbits);
+          break;
+        case PANASONIC:
+          irsend.sendPanasonic(data, nbits);
+          break;
+        default:
+          break;
+      }
+      delay(repeatDelay);
     }
-    digitalWrite(D7, LOW);
-    strip.setPixelColor(0, red, green, blue);
-    strip.show();
+    neoReset();
 }

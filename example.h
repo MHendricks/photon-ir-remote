@@ -5,20 +5,24 @@
 
 #include "IRremote.h"
 
-extern int const BUTTON_COUNT;
+// Maximum number of commands
 int const DATA_COUNT = 2;
+extern int const BUTTON_COUNT;
+extern int const BUTTON_ACTION_ID;
 
 typedef struct {
-  int sysType;
-  unsigned long data;
-  int nbits;
-  int delay;
-} IRData;
+  int sysType; // Send data type
+  unsigned long data; // Data to send
+  int nbits; // Number of bits to send
+  int repeat; // How many times to repeat the message
+  int repeatDelay; // Delay between repeats
+  int delay; // Delay before sending next command
+} IRCommand;
 
 typedef struct {
   char *displayName;
-  //char *irId; // I'm going to drop this for irData index
-  IRData commands[DATA_COUNT];
+  int commandCount;
+  IRCommand commands[DATA_COUNT];
 } IRAction;
 
 extern IRAction irActions[];
