@@ -10,27 +10,34 @@
 #include "WebServer.h"
 #include "neopixel.h"
 
-#include "Adafruit_GFX.h"
-#include "Adafruit_SSD1306.h"
 
 #include "IRAction_Example.h"
+/* Uncomment this line to enable using a OLED display. If not using one,
+   leaving this defined will cause the Photon to lag and crash when the i2c
+   device doesn't respond. */
+//#define USE_OLED
 
-// OLED display -----------------------------------------------------------------------------------------
-#define OLED_RESET 4
-Adafruit_SSD1306 display(OLED_RESET);
+#ifdef USE_OLED
 
-#if (SSD1306_LCDHEIGHT != 64)
-#error("Height incorrect, please fix Adafruit_SSD1306.h!");
+  #include "Adafruit_GFX.h"
+  #include "Adafruit_SSD1306.h"
+
+  // OLED display -----------------------------------------------------------------------------------------
+  #define OLED_RESET 4
+  Adafruit_SSD1306 display(OLED_RESET);
+
+  #if (SSD1306_LCDHEIGHT != 64)
+  #error("Height incorrect, please fix Adafruit_SSD1306.h!");
+  #endif
+
+  /* Clear the display when millis() is larger than this number. The display will
+     not be cleared if this value is set to zero. */
+  long lastUpdate = 0;
 #endif
 
 char deviceIP[24];
-/* Clear the display when millis() is larger than this number. The display will
-   not be cleared if this value is set to zero. */
-long lastUpdate = 0;
 
 // IR Send ----------------------------------------------------------------------------------------------
-String configData = ""; // Used to store the config string
-
 IRsend irsend(D2);
 
 #define button1 D3
@@ -71,6 +78,7 @@ void neoReset() {
   neoColor(red, green, blue);
 }
 
+#ifdef USE_OLED
 // Debug printing to OLED and serial console -----------------------------------
 void displayClear(bool update=false) {
   // Clear the buffer.
@@ -108,6 +116,7 @@ void displayPrintln(int base, bool update=false) {
     display.display();
   }
 }
+#endif
 
 /* This command is set as the default command for the server.  It
  * handles both GET and POST requests.  For a GET, it returns a simple
@@ -428,6 +437,8 @@ void setup()
     OLED display if connected */
   IPAddress myIp = WiFi.localIP();
   sprintf(deviceIP, "%d.%d.%d.%d", myIp[0], myIp[1], myIp[2], myIp[3]);
+  /* Store the ipAddress as a Spark Variable so we can get the IP address
+     without using a OLED display */
   Particle.variable("ipAddress", deviceIP, STRING);
 
   Serial.begin(9600);
@@ -435,19 +446,21 @@ void setup()
   pinMode(button1, INPUT_PULLDOWN);
   pinMode(button2, INPUT_PULLDOWN);
 
-  // OLED ----------------------------------------------------------
-  display.begin(SSD1306_SWITCHCAPVCC, 0x3C);  // initialize with the I2C addr 0x3D (for the 128x64)
-  // Show the IP address
-  display.setTextSize(2);
-  display.setTextColor(WHITE);
-  display.display();
-  display.clearDisplay();
-  display.setTextSize(2);
-  display.println("");
-  display.setTextSize(3);
-  display.println("IR");
-  display.println("Blaster");
-  display.display();
+  #ifdef USE_OLED
+    // OLED ----------------------------------------------------------
+    display.begin(SSD1306_SWITCHCAPVCC, 0x3C);  // initialize with the I2C addr 0x3D (for the 128x64)
+    // Show the IP address
+    display.setTextSize(2);
+    display.setTextColor(WHITE);
+    display.display();
+    display.clearDisplay();
+    display.setTextSize(2);
+    display.println("");
+    display.setTextSize(3);
+    display.println("IR");
+    display.println("Blaster");
+    display.display();
+  #endif
 
   // Web Server ----------------------------------------------------------
   // register our default command (activated with the request of http://x.x.x.x
@@ -465,8 +478,10 @@ void setup()
   strip.begin();
   neoColor(0, 0, 0);
 
-  // Show the Program name for a while, but continue to boot.
-  lastUpdate = millis();
+  #ifdef USE_OLED
+    // Show the Program name for a while, but continue to boot.
+    lastUpdate = millis();
+  #endif
 }
 
 void loop() {
@@ -491,25 +506,31 @@ void loop() {
       lastState2 = state;
   }
 
-  // Clear the display if the timer has expired
-  if (lastUpdate != 0) {
-    unsigned long currentMillis = millis();
-    if(currentMillis - lastUpdate > displayReset) {
-      displayClear(true);
-      lastUpdate = 0;
+  #ifdef USE_OLED
+    // Clear the display if the timer has expired
+    if (lastUpdate != 0) {
+      unsigned long currentMillis = millis();
+      if(currentMillis - lastUpdate > displayReset) {
+        displayClear(true);
+        lastUpdate = 0;
+      }
     }
-  }
+  #endif
 }
 
 bool sendIrAction(int actionId) {
   // Reset the display after the delay
-  lastUpdate = millis();
-  displayClear();
-  display.setTextSize(2);
+  #ifdef USE_OLED
+    lastUpdate = millis();
+    displayClear();
+    display.setTextSize(2);
+  #endif
   if (actionId < 0 || actionId >= ACTION_COUNT) {
     // A invalid id was passed, blink red 3 times then return.
-    displayPrint("Invalid ID");
-    displayPrintln(actionId, true);
+    #ifdef USE_OLED
+      displayPrint("Invalid ID");
+      displayPrintln(actionId, true);
+    #endif
     for (int i=0; i < 3; i++) {
       neoColor(255, 0, 0);
       delay(100);
@@ -520,8 +541,10 @@ bool sendIrAction(int actionId) {
     return false; // Invalid value
   }
 
-  displayPrintln("Sending:");
-  displayPrint(irActions[actionId].displayName, true);
+  #ifdef USE_OLED
+    displayPrintln("Sending:");
+    displayPrint(irActions[actionId].displayName, true);
+  #endif
   for (int i=0; i < irActions[actionId].commandCount; i++) {
     // Send each command
     IRCommand command = irActions[actionId].commands[i];
@@ -531,15 +554,19 @@ bool sendIrAction(int actionId) {
       the process for a additional delay. */
     if (i+1 < irActions[actionId].commandCount) {
       // Show a open ended progress bar of each command that is sent
-      display.setTextSize(1);
-      display.setCursor(i, SSD1306_LCDHEIGHT - 8); // 8 is the base height of text
-      displayPrintln("|", true);
+      #ifdef USE_OLED
+        display.setTextSize(1);
+        display.setCursor(i, SSD1306_LCDHEIGHT - 8); // 8 is the base height of text
+        displayPrintln("|", true);
+      #endif
 
       // Delay between commands
       delay(command.delay);
 
-      // Ensure the display doesn't reset until after all of the commands have processed
-      lastUpdate = millis();
+      #ifdef USE_OLED
+        // Ensure the display doesn't reset until after all of the commands have processed
+        lastUpdate = millis();
+      #endif
     }
   }
   return true;
