@@ -521,13 +521,26 @@ bool sendIrAction(int actionId) {
   }
 
   displayPrintln("Sending:");
-  displayPrintln(irActions[actionId].displayName, true);
+  displayPrint(irActions[actionId].displayName, true);
   for (int i=0; i < irActions[actionId].commandCount; i++) {
     // Send each command
     IRCommand command = irActions[actionId].commands[i];
     sendMessage(command.sysType, command.data, command.nbits, command.repeat, command.repeatDelay);
-    // Delay between commands
-    delay(command.delay);
+    /* Only delay by IRCommand.delay if there are more commands to process.
+      this allows us to reuse IRCommands with delay set, and doesn't tie up
+      the process for a additional delay. */
+    if (i+1 < irActions[actionId].commandCount) {
+      // Show a open ended progress bar of each command that is sent
+      display.setTextSize(1);
+      display.setCursor(i, SSD1306_LCDHEIGHT - 8); // 8 is the base height of text
+      displayPrintln("|", true);
+
+      // Delay between commands
+      delay(command.delay);
+
+      // Ensure the display doesn't reset until after all of the commands have processed
+      lastUpdate = millis();
+    }
   }
   return true;
 }
