@@ -24,16 +24,21 @@ Adafruit_SSD1306 display(OLED_RESET);
 #endif
 
 char deviceIP[24];
-long lastUpdate = 0; // Used to clear the display after a delay
-long displayReset = 1000; // Reset the display after this many millis
+/* Clear the display when millis() is larger than this number. The display will
+   not be cleared if this value is set to zero. */
+long lastUpdate = 0;
 
 // IR Send ----------------------------------------------------------------------------------------------
 String configData = ""; // Used to store the config string
 
 IRsend irsend(D2);
 
-#define button D3
-bool lastState = false;
+#define button1 D3
+#define button2 D7
+/* Basic button state tracking. Only register a press/release when the button value
+   is diffrent than these value. */
+bool lastState1 = false;
+bool lastState2 = false;
 
 // Web Server ------------------------------------------------------------------
 /* We will listen on port 80, the standard HTTP service port */
@@ -71,9 +76,8 @@ void displayClear(bool update=false) {
   // Clear the buffer.
   display.clearDisplay();
   display.setCursor(0, 0);
-  display.setTextSize(2);
-  display.print("IP:");
   display.setTextSize(1);
+  display.print("IP:");
   display.print(deviceIP);
   display.setCursor(0, 16);
   if (update) {
@@ -169,15 +173,16 @@ void pageCmd(WebServer &server, WebServer::ConnectionType type, char *, bool)
       "        <script src=\"//ajax.googleapis.com/ajax/libs/jquery/1.10.2/jquery.min.js\"></script>\n"
       "        <script src=\"//code.jquery.com/ui/1.11.4/jquery-ui.js\"></script>\n"
       "        <style>\n"
-      "            .ui-body {padding-bottom: 1.5em; -webkit-column-count: 2; /* Chrome, Safari, Opera */ -moz-column-count: 2; /* Firefox */ column-count: 2;}\n"
+      "            .ui-body {-webkit-column-count: 2; /* Chrome, Safari, Opera */ -moz-column-count: 2; /* Firefox */ column-count: 2;}\n"
       "            .ui-btn-text, .ui-btn {position: initial;}\n"
+      "            .ui-btn {display: inline-block;}\n"
       "            #red, #green, #blue { margin: 10px; } \n"
       "            #red { background: #f00; } \n"
       "            #green { background: #0f0; } \n"
       "            #blue { background: #00f; }\n"
       "            h3 {text-align: center;}\n"
-      "            .ui-accordion-header {background-color:#748174;}\n"
-      "            .ui-accordion-header-active {background-color:#487B41;}\n"
+      "            .ui-accordion-header {background-color:#748174; margin: 0 1em; width: initial; -webkit-margin-before: 0.25em; -webkit-margin-after: 0.25em;}\n"
+      "            .ui-accordion-header-active {background-color:#487B41; margin: 0em;}\n"
       "        </style>\n"
       "        <script>\n"
       "            $(document).ready(function(){ \n"
@@ -206,15 +211,14 @@ void pageCmd(WebServer &server, WebServer::ConnectionType type, char *, bool)
       "            });\n"
       "            $(function() {\n"
       "                $( \"#accordion\" ).accordion({\n"
-      "                    collapsible: true\n"
+      "                    collapsible: true,\n"
+      "                    heightStyle: \"content\"\n"
       "                });\n"
       "            });\n"
       "        </script>\n"
       "    </head>\n"
       "    <body>\n"
-      "        <div data-theme=\"b\" data-role=\"page\" id=\"accordion\">\n"
-      "            <h3>Photon Blaster</h3>\n"
-      "            <div class=\"ui-body\">\n";
+      "        <div data-theme=\"b\" data-role=\"page\" id=\"accordion\">\n";
 
     P(messageEnd) =
       "            </div>\n"
@@ -232,11 +236,26 @@ void pageCmd(WebServer &server, WebServer::ConnectionType type, char *, bool)
     // Serve the first part of the web page
     server.printP(message);
 
-    for (int i=0; i<BUTTON_COUNT; i++) {
+    /* Multi-header support does not check if a header title was used before the
+       current contents of lastHeader. So if you create actions with headers set
+       in this order "A", "A", "B", "B", "B", "A" it will result in 3 headers
+       "A", "B", "A" instead of "A", "B" */
+    char *lastHeader = "";
+    for (int i=0; i < ACTION_COUNT; i++) {
+      IRAction action = irActions[i];
+      if (lastHeader != action.header) {
+        if (lastHeader != "") {
+          server.printP("            </div>\n");
+        }
+        server.printP("            <h3>"); server.printP(action.header); server.printP("</h3>\n");
+        server.printP("            <div class=\"ui-body\">\n");
+        lastHeader = action.header;
+      }
+
       server.printP("                <button type=\"button\" id=\"");
       server.printf("%i", i);
       server.printP("\">");
-      server.printP(irActions[i].displayName);
+      server.printP(action.displayName);
       server.printP("</button>\n");
     }
     // Serve the last of the web page
@@ -468,24 +487,30 @@ void faviconCmd(WebServer &server, WebServer::ConnectionType type, char *url_tai
 
 void setup()
 {
-  // Get the IP address so we can print it
+  /* Get the IP address so we can publish it as a spark core and show it in the
+    OLED display if connected */
   IPAddress myIp = WiFi.localIP();
   sprintf(deviceIP, "%d.%d.%d.%d", myIp[0], myIp[1], myIp[2], myIp[3]);
+  Particle.variable("ipAddress", deviceIP, STRING);
 
   Serial.begin(9600);
 
-  pinMode(button, INPUT_PULLDOWN);
+  pinMode(button1, INPUT_PULLDOWN);
+  pinMode(button2, INPUT_PULLDOWN);
 
   // OLED ----------------------------------------------------------
   display.begin(SSD1306_SWITCHCAPVCC, 0x3C);  // initialize with the I2C addr 0x3D (for the 128x64)
   // Show the IP address
-  //display.clearDisplay();
   display.setTextSize(2);
   display.setTextColor(WHITE);
-  //display.println("IR Sender");
   display.display();
-  delay(250);
-  displayClear(true);
+  display.clearDisplay();
+  display.setTextSize(2);
+  display.println("");
+  display.setTextSize(3);
+  display.println("IR");
+  display.println("Blaster");
+  display.display();
 
   // Web Server ----------------------------------------------------------
   /* register our default command (activated with the request of
@@ -503,22 +528,35 @@ void setup()
 
   /* NeoPixel setup */
   strip.begin();
-  strip.show(); // Initialize all pixels to 'off'
+  neoColor(0, 0, 0);
+
+  // Show the Program name for a while, but continue to boot.
+  lastUpdate = millis();
 }
 
 void loop() {
   // process incoming connections from the web server
   webserver.processConnection();
 
-  // Check if the button was pressed
-  bool state = digitalRead(button);
-  if (state != lastState) {
-      if (state){
-        sendIrAction(BUTTON_ACTION_ID);
+  // Check if button1 was pressed
+  bool state = digitalRead(button1);
+  if (state != lastState1) {
+      if (state) {
+        sendIrAction(BUTTON1_ACTION_ID);
       }
-      lastState = state;
+      lastState1 = state;
   }
 
+  // Check if button2 was pressed
+  state = digitalRead(button2);
+  if (state != lastState2) {
+      if (state) {
+        sendIrAction(BUTTON2_ACTION_ID);
+      }
+      lastState2 = state;
+  }
+
+  // Clear the display if the timer has expired
   if (lastUpdate != 0) {
     unsigned long currentMillis = millis();
     if(currentMillis - lastUpdate > displayReset) {
@@ -530,10 +568,10 @@ void loop() {
 
 bool sendIrAction(int actionId) {
   // Reset the display after the delay
-  lastUpdate = millis() + displayReset;
+  lastUpdate = millis();
   displayClear();
   display.setTextSize(2);
-  if (actionId < 0 || actionId >= BUTTON_COUNT) {
+  if (actionId < 0 || actionId >= ACTION_COUNT) {
     // A invalid id was passed, blink red 3 times then return.
     displayPrint("Invalid ID");
     displayPrintln(actionId, true);
@@ -548,7 +586,7 @@ bool sendIrAction(int actionId) {
   }
 
   displayPrintln("Sending:");
-  displayPrintln(actionId, true);
+  displayPrintln(irActions[actionId].displayName, true);
   for (int i=0; i < irActions[actionId].commandCount; i++) {
     // Send each command
     IRCommand command = irActions[actionId].commands[i];

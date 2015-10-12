@@ -5,10 +5,15 @@
 
 #include "IRremote.h"
 
-// Maximum number of commands
-int const DATA_COUNT = 2;
-extern int const BUTTON_COUNT;
-extern int const BUTTON_ACTION_ID;
+// Maximum number of IRCommands
+int const COMMAND_COUNT = 2;
+// Total number of IRActions served by this device
+extern int const ACTION_COUNT;
+// The Photon digital pins used as buttons
+extern int const BUTTON1_ACTION_ID;
+extern int const BUTTON2_ACTION_ID;
+// Clear the OLED display after this many millis
+extern const long displayReset;
 
 typedef struct {
   int sysType; // Send data type
@@ -20,9 +25,14 @@ typedef struct {
 } IRCommand;
 
 typedef struct {
-  char *displayName;
+  char *displayName; // Name shown on the button
+  /* All buttons with the same header defined sequencially will be grouped
+     under the same header in the Web Page. */
+  char *header;
+  // The number of IRCommands in this action
   int commandCount;
-  IRCommand commands[DATA_COUNT];
+  // Array of IRCommands to send when this action is called.
+  IRCommand commands[COMMAND_COUNT];
 } IRAction;
 
 extern IRAction irActions[];
