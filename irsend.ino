@@ -263,69 +263,6 @@ void pageCmd(WebServer &server, WebServer::ConnectionType type, char *, bool)
   }
 }
 
-void setConfigCmd(WebServer &server, WebServer::ConnectionType type, char *url_tail, bool tail_complete) {
-  URLPARAM_RESULT rc;
-  char name[NAMELEN];
-  char value[VALUELEN];
-
-  server.httpSuccess();
-
-  if (type == WebServer::POST) {
-    while (server.readPOSTparam(name, NAMELEN, value, VALUELEN))
-    {
-      displayClear();
-      displayPrint("Name: ");
-      displayPrintln(name);
-      displayPrint("Value: ");
-      displayPrintln(value);
-      if (strcmp(name, "config") == 0) {
-        displayPrintln("Its config");
-        configData = value;
-      }
-      display.display();
-    }
-  }
-}
-
-void setConfigCmdTest(WebServer &server, WebServer::ConnectionType type, char *url_tail, bool tail_complete) {
-  URLPARAM_RESULT rc;
-  char name[NAMELEN];
-  char value[VALUELEN];
-
-  displayClear();
-  if (!tail_complete) {
-    // this line sends the standard "we're all OK" headers back to the browser
-    displayPrintln("URL Tail not complete", true);
-    server.httpFail();
-  } else {
-    displayPrintln("URL Tail complete", true);
-    server.httpSuccess();
-  }
-
-  if (strlen(url_tail)) {
-    displayPrintln(url_tail);
-    while (strlen(url_tail)) {
-      rc = server.nextURLparam(&url_tail, name, NAMELEN, value, VALUELEN);
-      if (rc == URLPARAM_EOS) {
-        displayPrintln("OK");
-      } else {
-        displayPrint(name);
-        displayPrint(" ");
-        displayPrintln(value);
-        if (strcmp(name, "config") == 0) {
-          configData = value;
-          display.display();
-          return;
-        }
-      }
-    }
-  }
-
-  configData = "Fail";
-  display.display();
-  return;
-}
-
 void rgbCmd(WebServer &server, WebServer::ConnectionType type, char *url_tail, bool tail_complete) {
   URLPARAM_RESULT rc;
   char name[NAMELEN];
@@ -513,10 +450,8 @@ void setup()
   display.display();
 
   // Web Server ----------------------------------------------------------
-  /* register our default command (activated with the request of
-   * http://x.x.x.x/rgb */
+  // register our default command (activated with the request of http://x.x.x.x
   webserver.setDefaultCommand(&pageCmd);
-  webserver.addCommand("setConfig.html", &setConfigCmd);
   webserver.addCommand("favicon.png", &faviconCmd);
   webserver.addCommand("rgb.html", &rgbCmd);
   #ifdef PARSEDCMD
