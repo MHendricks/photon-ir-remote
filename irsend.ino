@@ -13,7 +13,7 @@
 #include "Adafruit_GFX.h"
 #include "Adafruit_SSD1306.h"
 
-#include "example.h"
+#include "IRAction_Example.h"
 
 // OLED display -----------------------------------------------------------------------------------------
 #define OLED_RESET 4

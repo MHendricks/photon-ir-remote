@@ -1,5 +1,8 @@
-// setup_living_room.c -------------------------------------------
-#include "example.h"
+/* Example of the config header used to define all of the actions the IR Blaster
+	will show on its web page and the ir commands it sends when the buttons are
+	pressed in the web page and on the device.
+ */
+#include "IRAction.h"
 int const ACTION_COUNT = 8;
 int const BUTTON1_ACTION_ID = 5;
 int const BUTTON2_ACTION_ID = 1;

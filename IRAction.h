@@ -1,7 +1,7 @@
 // example.h ---------------------------------------------
 
-#ifndef EXAMPLE_H
-#define EXAMPLE_H
+#ifndef IRACTION_H_
+#define IRACTION_H_
 
 #include "IRremote.h"
 
@@ -37,4 +37,4 @@ typedef struct {
 
 extern IRAction irActions[];
 
-#endif // EXAMPLE_H
+#endif // IRACTION_H_
