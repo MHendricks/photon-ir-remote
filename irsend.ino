@@ -17,12 +17,15 @@
    device doesn't respond. */
 //#define USE_OLED
 
+// If defined, serve http://host/parsed.html this is useful for checking url args
+//#define PARSEDCMD
+
 #ifdef USE_OLED
 
   #include "Adafruit_GFX.h"
   #include "Adafruit_SSD1306.h"
 
-  // OLED display -----------------------------------------------------------------------------------------
+  // OLED display --------------------------------------------------------------
   #define OLED_RESET 4
   Adafruit_SSD1306 display(OLED_RESET);
 
@@ -30,20 +33,20 @@
   #error("Height incorrect, please fix Adafruit_SSD1306.h!");
   #endif
 
-  /* Clear the display when millis() is larger than this number. The display will
-     not be cleared if this value is set to zero. */
+  /* Clear the display when millis() is larger than this number. The display
+     will not be cleared if this value is set to zero. */
   long lastUpdate = 0;
 #endif
 
 char deviceIP[24];
 
-// IR Send ----------------------------------------------------------------------------------------------
+// IR Send ---------------------------------------------------------------------
 IRsend irsend(D2);
 
 #define button1 D3
 #define button2 D7
-/* Basic button state tracking. Only register a press/release when the button value
-   is diffrent than these value. */
+/* Basic button state tracking. Only register a press/release when the button
+   value is diffrent than these value. */
 bool lastState1 = false;
 bool lastState2 = false;
 
@@ -52,8 +55,6 @@ bool lastState2 = false;
 WebServer webserver("", 80);
 #define NAMELEN 32
 #define VALUELEN 1024
-// If defined, accept http://host/parsed.html for debuging
-#define PARSEDCMD
 
 // NeoPixel --------------------------------------------------------------------
 // IMPORTANT: Set pixel COUNT, PIN and TYPE
@@ -156,7 +157,7 @@ void pageCmd(WebServer &server, WebServer::ConnectionType type, char *, bool)
   {
     /* Python Code to convert a html file into P() compatible string data.
           prefix = '      '
-          with open(r'C:\Users\mikeh\Google Drive\ESP8266\MicroRemote\web2py\applications\welcome\views\default\ajaxtest.html') as f:
+          with open(r'.\example.html') as f:
           	for line in f.readlines():
           		line = line.replace('\n', '')
           		line = line.replace('"', '\\"')
