@@ -6,7 +6,7 @@
 #include "IRremote.h"
 
 // Maximum number of IRCommands
-int const COMMAND_COUNT = 2;
+int const COMMAND_COUNT = 12;
 // Total number of IRActions served by this device
 extern int const ACTION_COUNT;
 // The Photon digital pins used as buttons
@@ -25,6 +25,7 @@ typedef struct {
 } IRCommand;
 
 typedef struct {
+  char *name; // Command string for url requests
   char *displayName; // Name shown on the button
   /* All buttons with the same header defined sequencially will be grouped
      under the same header in the Web Page. */

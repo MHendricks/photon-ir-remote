@@ -10,8 +10,9 @@
 #include "WebServer.h"
 #include "neopixel.h"
 
+//#include "IRAction_Example.h"
+#include "IRAction_Mike.h"
 
-#include "IRAction_Example.h"
 /* Uncomment this line to enable using a OLED display. If not using one,
    leaving this defined will cause the Photon to lag and crash when the i2c
    device doesn't respond. */
@@ -49,6 +50,11 @@ IRsend irsend(D2);
    value is diffrent than these value. */
 bool lastState1 = false;
 bool lastState2 = false;
+/* When processing a Particle.function call, the requested irAction and repeat is
+    stored in these variables. This allows us to report if the request was valid,
+    but we don't need to waste AWS processing time. */
+int commandRequest = -1;
+int commandRepeat = 0;
 
 // Web Server ------------------------------------------------------------------
 /* We will listen on port 80, the standard HTTP service port */
@@ -432,6 +438,36 @@ void faviconCmd(WebServer &server, WebServer::ConnectionType type, char *url_tai
   }
 }
 
+int sendCommand(String command) {
+  #ifdef USE_OLED
+    display.clearDisplay();
+    display.setCursor(0, 0);
+    display.setTextSize(1);
+    displayPrintln("Command:");
+    displayPrint(command);
+    displayPrintln("--", true);
+  #endif
+  //Serial.print("---"); Serial.print(command);Serial.println("---");
+  /* Particle.function only accepts a single argument so to support repeat counts
+      we look for a :. "volume up:3" For example would send "volume up" 3 times. */
+  char buf[63];
+  command.toCharArray(buf, 63);
+  char* chunk = strtok(buf, ":");
+  commandRequest = findCommandId(chunk);
+  if (commandRequest == -1) {
+    //Serial.println("Bad Request.");
+    // Bad Request notify the caller.
+    return -1;
+  }
+  // Look for a repeat count argument. If not found force the repeat count to 1.
+  commandRepeat = atoi(strtok(0, ":"));
+  if (commandRepeat == 0) {
+    commandRepeat = 1;
+  }
+  //Serial.print("*"); Serial.print(commandRequest); Serial.print("*"); Serial.print(commandRepeat);  Serial.println("*");
+  return 1;
+}
+
 void setup()
 {
   /* Get the IP address so we can publish it as a spark core and show it in the
@@ -441,6 +477,9 @@ void setup()
   /* Store the ipAddress as a Spark Variable so we can get the IP address
      without using a OLED display */
   Particle.variable("ipAddress", deviceIP, STRING);
+  // Add a test function to cloud
+  //Particle.function("setLed", setLed);
+  Particle.function("sendCommand", sendCommand);
 
   Serial.begin(9600);
 
@@ -489,6 +528,19 @@ void loop() {
   // process incoming connections from the web server
   webserver.processConnection();
 
+  // Process Particle.function requests if provided
+  if (commandRequest != -1) {
+    do {
+      if (commandRepeat--) {
+        // Only send the name if we got a repeat value. This prevents sending
+        // Two messages.
+        Serial.println(irActions[commandRequest].name);
+        sendIrAction(commandRequest, true);
+      }
+    } while (commandRepeat);
+    commandRequest = -1;
+  }
+
   // Check if button1 was pressed
   bool state = digitalRead(button1);
   if (state != lastState1) {
@@ -519,19 +571,33 @@ void loop() {
   #endif
 }
 
+/* Convert a string argument to a command index */
+int findCommandId(String command) {
+  for(int i=0; i < ACTION_COUNT; i++) {
+    if (command.equalsIgnoreCase(irActions[i].name)) {
+      return i;
+    }
+  }
+  return -1;
+}
+
 bool sendIrAction(int actionId) {
+  sendIrAction(actionId, false);
+}
+
+bool sendIrAction(int actionId, bool forceDelay) {
   // Reset the display after the delay
   #ifdef USE_OLED
-    lastUpdate = millis();
+    /*lastUpdate = millis();
     displayClear();
-    display.setTextSize(2);
+    display.setTextSize(2);*/
   #endif
   if (actionId < 0 || actionId >= ACTION_COUNT) {
     // A invalid id was passed, blink red 3 times then return.
-    #ifdef USE_OLED
+    /*#ifdef USE_OLED
       displayPrint("Invalid ID");
       displayPrintln(actionId, true);
-    #endif
+    #endif*/
     for (int i=0; i < 3; i++) {
       neoColor(255, 0, 0);
       delay(100);
@@ -542,10 +608,10 @@ bool sendIrAction(int actionId) {
     return false; // Invalid value
   }
 
-  #ifdef USE_OLED
+  /*#ifdef USE_OLED
     displayPrintln("Sending:");
     displayPrint(irActions[actionId].displayName, true);
-  #endif
+  #endif*/
   for (int i=0; i < irActions[actionId].commandCount; i++) {
     // Send each command
     IRCommand command = irActions[actionId].commands[i];
@@ -553,13 +619,13 @@ bool sendIrAction(int actionId) {
     /* Only delay by IRCommand.delay if there are more commands to process.
       this allows us to reuse IRCommands with delay set, and doesn't tie up
       the process for a additional delay. */
-    if (i+1 < irActions[actionId].commandCount) {
+    if (forceDelay || i+1 < irActions[actionId].commandCount) {
       // Show a open ended progress bar of each command that is sent
-      #ifdef USE_OLED
+      /*#ifdef USE_OLED
         display.setTextSize(1);
         display.setCursor(i, SSD1306_LCDHEIGHT - 8); // 8 is the base height of text
         displayPrintln("|", true);
-      #endif
+      #endif*/
 
       // Delay between commands
       delay(command.delay);
