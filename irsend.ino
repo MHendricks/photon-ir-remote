@@ -11,15 +11,23 @@
 #include "neopixel.h"
 
 //#include "IRAction_Example.h"
-#include "IRAction_Mike.h"
+#include "IRAction_Home.h"
 
 /* Uncomment this line to enable using a OLED display. If not using one,
    leaving this defined will cause the Photon to lag and crash when the i2c
    device doesn't respond. */
-//#define USE_OLED
+#define USE_OLED
 
 // If defined, serve http://host/parsed.html this is useful for checking url args
 //#define PARSEDCMD
+
+// If defined, use roku commands
+#define USE_ROKU
+
+#ifdef USE_ROKU
+TCPClient roku_client;
+char *rokuUrl = "Undefined";
+#endif
 
 #ifdef USE_OLED
 
@@ -103,6 +111,14 @@ void displayClear(bool update=false) {
 void displayPrint(String text, bool update=false) {
   display.print(text);
   Serial.print(text);
+  if (update) {
+    display.display();
+  }
+}
+
+void displayPrint(int base, bool update=false) {
+  display.print(base);
+  Serial.print(base);
   if (update) {
     display.display();
   }
@@ -581,6 +597,53 @@ int findCommandId(String command) {
   return -1;
 }
 
+bool sendRokuAction(char *name) {
+#ifdef USE_ROKU
+  if (roku_client.connect(roku_server, roku_port)) {
+      //POST http://192.168.1.116:8060/keypress/Right
+      roku_client.print("POST http://");
+      for (int i = 0; i < 3; ++i) {
+      	roku_client.print(roku_server[i]); roku_client.print(".");
+      }
+      roku_client.print(roku_server[3]); // We don't want to print a trailing .
+      roku_client.print(":");
+      roku_client.print(roku_port);
+      roku_client.print("/");
+      roku_client.println(name);
+
+      display.clearDisplay();
+      display.setCursor(0,0);
+      display.setTextSize(1);
+      displayPrint("POST http://");
+      for (int i = 0; i < 3; ++i) {
+      	displayPrint(roku_server[i]); displayPrint(".");
+      }
+      displayPrint(roku_server[3]); // We don't want to print a trailing .
+      displayPrint(":");
+      displayPrint(roku_port);
+      displayPrint("/");
+      displayPrintln(name, true);
+
+
+      //sprintf(rokuUrl, "POST http://%d.%d.%d.%d:%d/%s", roku_server[0], roku_server[1], roku_server[2], roku_server[3], roku_port, name);
+
+      //roku_client.println(rokuUrl);
+      roku_client.println("Content-Length: 0");
+      roku_client.println();
+      /*#ifdef USE_OLED
+        display.clearDisplay();
+        display.setCursor(0, 0);
+        display.setTextSize(1);
+        displayPrintln("Roku:");
+        displayPrint(rokuUrl);
+        displayPrintln("--", true);
+      #endif*/
+      return true;
+    }
+#endif
+  return false;
+}
+
 bool sendIrAction(int actionId) {
   sendIrAction(actionId, false);
 }
@@ -588,16 +651,16 @@ bool sendIrAction(int actionId) {
 bool sendIrAction(int actionId, bool forceDelay) {
   // Reset the display after the delay
   #ifdef USE_OLED
-    /*lastUpdate = millis();
+    lastUpdate = millis();
     displayClear();
-    display.setTextSize(2);*/
+    display.setTextSize(2);
   #endif
   if (actionId < 0 || actionId >= ACTION_COUNT) {
     // A invalid id was passed, blink red 3 times then return.
-    /*#ifdef USE_OLED
+    #ifdef USE_OLED
       displayPrint("Invalid ID");
       displayPrintln(actionId, true);
-    #endif*/
+    #endif
     for (int i=0; i < 3; i++) {
       neoColor(255, 0, 0);
       delay(100);
@@ -608,24 +671,24 @@ bool sendIrAction(int actionId, bool forceDelay) {
     return false; // Invalid value
   }
 
-  /*#ifdef USE_OLED
+  #ifdef USE_OLED
     displayPrintln("Sending:");
     displayPrint(irActions[actionId].displayName, true);
-  #endif*/
+  #endif
   for (int i=0; i < irActions[actionId].commandCount; i++) {
     // Send each command
     IRCommand command = irActions[actionId].commands[i];
-    sendMessage(command.sysType, command.data, command.nbits, command.repeat, command.repeatDelay);
+    sendMessage(command.sysType, command.data, command.nbits, command.repeat, command.repeatDelay, command.name);
     /* Only delay by IRCommand.delay if there are more commands to process.
       this allows us to reuse IRCommands with delay set, and doesn't tie up
       the process for a additional delay. */
     if (forceDelay || i+1 < irActions[actionId].commandCount) {
       // Show a open ended progress bar of each command that is sent
-      /*#ifdef USE_OLED
+      #ifdef USE_OLED
         display.setTextSize(1);
         display.setCursor(i, SSD1306_LCDHEIGHT - 8); // 8 is the base height of text
         displayPrintln("|", true);
-      #endif*/
+      #endif
 
       // Delay between commands
       delay(command.delay);
@@ -639,7 +702,7 @@ bool sendIrAction(int actionId, bool forceDelay) {
   return true;
 }
 
-void sendMessage(int system, unsigned long data, int nbits, int repeat, int repeatDelay) {
+void sendMessage(int system, unsigned long data, int nbits, int repeat, int repeatDelay, char *name) {
     neoColor(0, 0, 25);
     for (int i=0; i < repeat; i++) {
       switch (system) {
@@ -663,6 +726,9 @@ void sendMessage(int system, unsigned long data, int nbits, int repeat, int repe
           break;
         case PANASONIC:
           irsend.sendPanasonic(data, nbits);
+          break;
+        case ROKU_REST:
+          sendRokuAction(name);
           break;
         default:
           break;

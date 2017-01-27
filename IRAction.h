@@ -15,6 +15,9 @@ extern int const BUTTON2_ACTION_ID;
 // Clear the OLED display after this many millis
 extern const long displayReset;
 
+// Additional sysTypes that do not send IR signals.
+extern const int ROKU_REST = 200;
+
 typedef struct {
   int sysType; // Send data type
   unsigned long data; // Data to send
@@ -22,6 +25,7 @@ typedef struct {
   int repeat; // How many times to repeat the message
   int repeatDelay; // Delay between repeats
   int delay; // Delay before sending next command
+  char *name; // The name of the command. Roku uses this for rest commands
 } IRCommand;
 
 typedef struct {
