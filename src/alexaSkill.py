@@ -38,6 +38,8 @@ menu
 enter
 up
 down
+left
+right
 video 1
 video 2
 dvd
@@ -48,6 +50,19 @@ cd
 tv power
 receiver power
 power
+okay
+back
+home
+replay
+rewind
+fast forward
+play
+pause
+star
+sleep
+google
+netflix
+chromecast
 """
 
 # Sample Utterances
@@ -85,12 +100,12 @@ def lambda_handler(event, context):
         if answer:
             logger.info([number])
             try:
-                number = int(number)
-                answer = '::'.join([answer,number])
-            except TypeError: # None was passed
-                number = None
-            except ValueError: # Not a int
-                number = None
+                # Ensure this is a valid value
+                int(number)
+                answer = ':'.join([answer, number])
+                logger.info([answer])
+            except (TypeError, ValueError):
+                logger.info('Bad Request');
             url = 'https://api.particle.io/v1/devices/{device_id}/sendCommand'.format(device_id=device_id)
             values = {
                 'arg' : answer,
@@ -101,17 +116,17 @@ def lambda_handler(event, context):
             req = urllib2.Request(url, data)
             response = urllib2.urlopen(req)
             the_page = response.read()
-            #logger.info(the_page)
+            logger.info(the_page)
             success = json.loads(the_page).get('return_value', -1)
         else:
             success = False
         singleRequest = event.get('session', {}).get("attributes", {}).get("singleRequest", 'true')
-        #logger.info([singleRequest])
+        logger.info([singleRequest])
         singleRequest = singleRequest == 'true'
         if success == 1:
             text = "No Problem" if singleRequest else "OK"
         else:
-            text = "Command not understood"
+            text = "Command {} not understood".format(answer)
         return buildResponse(text, endSession=singleRequest, singleRequest=singleRequest);
 
 def strBool(state):
@@ -137,5 +152,5 @@ def buildResponse(output, reprompt='Anything else?', endSession=False, singleReq
             "singleRequest": strBool(singleRequest)
         }
     }
-    #logger.info(ret)
+    logger.info(ret)
     return ret

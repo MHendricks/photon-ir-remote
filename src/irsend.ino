@@ -11,12 +11,12 @@
 #include "neopixel.h"
 
 //#include "IRAction_Example.h"
-#include "IRAction_Home.h"
+#include "IRAction_Home1.h"
 
 /* Uncomment this line to enable using a OLED display. If not using one,
    leaving this defined will cause the Photon to lag and crash when the i2c
    device doesn't respond. */
-#define USE_OLED
+//#define USE_OLED
 
 // If defined, serve http://host/parsed.html this is useful for checking url args
 //#define PARSEDCMD
@@ -26,13 +26,12 @@
 
 #ifdef USE_ROKU
 TCPClient roku_client;
-char *rokuUrl = "Undefined";
 #endif
 
 #ifdef USE_OLED
-
   #include "Adafruit_GFX.h"
   #include "Adafruit_SSD1306.h"
+  #ifdef USE_OLED
 
   // OLED display --------------------------------------------------------------
   #define OLED_RESET 4
@@ -42,6 +41,7 @@ char *rokuUrl = "Undefined";
   #error("Height incorrect, please fix Adafruit_SSD1306.h!");
   #endif
 
+#endif
   /* Clear the display when millis() is larger than this number. The display
      will not be cleared if this value is set to zero. */
   long lastUpdate = 0;
@@ -93,10 +93,10 @@ void neoReset() {
   neoColor(red, green, blue);
 }
 
-#ifdef USE_OLED
 // Debug printing to OLED and serial console -----------------------------------
 void displayClear(bool update=false) {
   // Clear the buffer.
+  #ifdef USE_OLED
   display.clearDisplay();
   display.setCursor(0, 0);
   display.setTextSize(1);
@@ -106,40 +106,48 @@ void displayClear(bool update=false) {
   if (update) {
     display.display();
   }
+  #endif
 }
 
 void displayPrint(String text, bool update=false) {
-  display.print(text);
   Serial.print(text);
+  #ifdef USE_OLED
+  display.print(text);
   if (update) {
     display.display();
   }
+  #endif
 }
 
 void displayPrint(int base, bool update=false) {
-  display.print(base);
   Serial.print(base);
+  #ifdef USE_OLED
+  display.print(base);
   if (update) {
     display.display();
   }
+  #endif
 }
 
 void displayPrintln(String text, bool update=false) {
-  display.println(text);
   Serial.println(text);
+  #ifdef USE_OLED
+  display.println(text);
   if (update) {
     display.display();
   }
+  #endif
 }
 
 void displayPrintln(int base, bool update=false) {
-  display.println(base);
   Serial.println(base);
+  #ifdef USE_OLED
+  display.println(base);
   if (update) {
     display.display();
   }
+  #endif
 }
-#endif
 
 /* This command is set as the default command for the server.  It
  * handles both GET and POST requests.  For a GET, it returns a simple
@@ -252,13 +260,16 @@ void pageCmd(WebServer &server, WebServer::ConnectionType type, char *, bool)
       "    <body>\n"
       "        <div data-theme=\"b\" data-role=\"page\" id=\"accordion\">\n";
 
-    P(messageEnd) =
+    P(messageRgbStart) =
       "            </div>\n"
       "            <h3>Set Color</h3>\n"
-      "            <div class=\"rgb-slider\">\n"
-      "                <input type=\"range\" name=\"slider\" id=\"red\" value=\"0\" min=\"0\" max=\"255\" /><br>\n"
-      "                <input type=\"range\" name=\"slider\" id=\"green\" value=\"0\" min=\"0\" max=\"255\" /><br>\n"
-      "                <input type=\"range\" name=\"slider\" id=\"blue\" value=\"0\" min=\"0\" max=\"255\" /><br>\n"
+      "            <div class=\"rgb-slider\">\n";
+
+    P(inputStart) = "                <input type=\"range\" name=\"slider\" id=\"";
+    P(inputValue) = "\" value=\"";
+    P(inputEnd) = "\" min=\"0\" max=\"255\" /><br>\n";
+
+    P(messageEnd) =
       "                <button id=\"Color\">Apply</button>\n"
       "            </div>\n"
       "        </div>\n"
@@ -275,6 +286,14 @@ void pageCmd(WebServer &server, WebServer::ConnectionType type, char *, bool)
     char *lastHeader = "";
     for (int i=0; i < ACTION_COUNT; i++) {
       IRAction action = irActions[i];
+
+      if (action.displayName == "") {
+        /* If no display name was provided, do not create a button. These
+           actions are created to add voice commands without cluttering the
+           button interface. */
+        continue;
+      }
+
       if (lastHeader != action.header) {
         if (lastHeader != "") {
           server.printP("            </div>\n");
@@ -290,6 +309,12 @@ void pageCmd(WebServer &server, WebServer::ConnectionType type, char *, bool)
       server.printP(action.displayName);
       server.printP("</button>\n");
     }
+    // build the rgb area
+    server.printP(messageRgbStart);
+    server.printP(inputStart); server.printP("red"); server.printP(inputValue); server.printf("%i", red); server.printP(inputEnd);
+    server.printP(inputStart); server.printP("green"); server.printP(inputValue); server.printf("%i", green); server.printP(inputEnd);
+    server.printP(inputStart); server.printP("blue"); server.printP(inputValue); server.printf("%i", blue); server.printP(inputEnd);
+
     // Serve the last of the web page
     server.printP(messageEnd);
   }
@@ -600,44 +625,15 @@ int findCommandId(String command) {
 bool sendRokuAction(char *name) {
 #ifdef USE_ROKU
   if (roku_client.connect(roku_server, roku_port)) {
-      //POST http://192.168.1.116:8060/keypress/Right
-      roku_client.print("POST http://");
-      for (int i = 0; i < 3; ++i) {
-      	roku_client.print(roku_server[i]); roku_client.print(".");
-      }
-      roku_client.print(roku_server[3]); // We don't want to print a trailing .
-      roku_client.print(":");
-      roku_client.print(roku_port);
-      roku_client.print("/");
-      roku_client.println(name);
-
-      display.clearDisplay();
-      display.setCursor(0,0);
-      display.setTextSize(1);
-      displayPrint("POST http://");
-      for (int i = 0; i < 3; ++i) {
-      	displayPrint(roku_server[i]); displayPrint(".");
-      }
-      displayPrint(roku_server[3]); // We don't want to print a trailing .
-      displayPrint(":");
-      displayPrint(roku_port);
-      displayPrint("/");
-      displayPrintln(name, true);
-
-
-      //sprintf(rokuUrl, "POST http://%d.%d.%d.%d:%d/%s", roku_server[0], roku_server[1], roku_server[2], roku_server[3], roku_port, name);
-
-      //roku_client.println(rokuUrl);
+      roku_client.print("POST /"); roku_client.print(name); roku_client.println(" HTTP/1.1");
+      roku_client.println("Connection: keep-alive");
+      roku_client.println("Accept-Encoding: gzip, deflate");
+      roku_client.println("Accept: */*");
+      roku_client.println("User-Agent: python-requests/2.13.0");
       roku_client.println("Content-Length: 0");
+
       roku_client.println();
-      /*#ifdef USE_OLED
-        display.clearDisplay();
-        display.setCursor(0, 0);
-        display.setTextSize(1);
-        displayPrintln("Roku:");
-        displayPrint(rokuUrl);
-        displayPrintln("--", true);
-      #endif*/
+      roku_client.flush();
       return true;
     }
 #endif
