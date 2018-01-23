@@ -76,6 +76,7 @@ AMAZON.StopIntent stop
 AMAZON.StopIntent no
 """
 
+# AWS Lambda function
 import logging
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
